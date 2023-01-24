@@ -1,7 +1,7 @@
 import tkinter as tk
 
-judge_list = ['低体重 | 痩せすぎ', '低体重 | 痩せ', '低体重 | 痩せぎみ', '普通体重',
-              '過体重 | 肥満予備軍', '過体重 | 肥満（1度）', '過体重 | 肥満（2度）', '過体重 | 肥満（3度）']
+judge_list = ['低体重（痩せすぎ）', '低体重（痩せ）', '低体重（痩せぎみ）', '普通体重',
+              '肥満予備軍（過体重）', '肥満（1度）', '肥満（2度）', '肥満（3度）']
 
 
 class App(tk.Tk):
@@ -91,7 +91,7 @@ class App(tk.Tk):
             self.bmi_result.set('{:.3f}'.format(self.enter_weight.get() / (self.enter_height.get() / 100) ** 2))
             res = float(self.bmi_result.get())
 
-            # BMI値によってWHO基準の判定を設定
+            # BMI値によってカテゴリー判定を設定
             if res <= 0.0 or self.enter_height.get() <= 0:
                 self.bmi_result.set("Error")
                 self.judge.set("入力エラー")
