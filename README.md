@@ -59,3 +59,17 @@ Windowsでの保存先:
 ```
 
 ログイン画面は540×620、計算画面は1260×760の固定サイズで表示します。
+
+## ソース構成
+
+- `BMI_cal.py`: 起動用エントリーポイント
+- `app.py`: 画面遷移とBMI入力画面の制御
+- `auth_screen.py`: ログインとユーザー登録
+- `storage.py`: SQLite、認証情報、測定履歴
+- `date_picker.py`: 年・月・日選択とカレンダー
+- `history_graph.py`: BMI・身長・体重のグラフ
+- `history_editor.py`: 過去データの一覧と編集
+- `bmi_logic.py`: BMI計算と区分判定
+- `ui_style.py`: 共通の配色、ボタン、入力欄
+
+モジュール間の依存関係とデータの流れは [ARCHITECTURE.md](ARCHITECTURE.md) を参照してください。
