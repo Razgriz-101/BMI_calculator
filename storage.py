@@ -2,7 +2,6 @@
 
 import hashlib
 import hmac
-import math
 import os
 import secrets
 import sqlite3
@@ -79,38 +78,6 @@ class Storage:
     def user_count(self):
         with closing(self.connect()) as connection:
             return connection.execute('SELECT COUNT(*) FROM users').fetchone()[0]
-
-    def seed_sample_history(self, user_id):
-        with closing(self.connect()) as connection, connection:
-            self.ensure_history_table(connection)
-            count = connection.execute(
-                'SELECT COUNT(*) FROM bmi_history WHERE user_id = ?', (user_id,)
-            ).fetchone()[0]
-            if count:
-                return
-
-            current_month = datetime.now(timezone.utc)
-            first_month_index = current_month.year * 12 + current_month.month - 1 - 59
-            records = []
-            for index in range(60):
-                year, month_index = divmod(first_month_index + index, 12)
-                month = month_index + 1
-                weight = round(
-                    70.0 - 4.0 * index / 59 + 0.6 * math.sin(index * 2 * math.pi / 12), 1,
-                )
-                measured_at = datetime(year, month, 1, 12, tzinfo=timezone.utc)
-                bmi, _category = calculate_bmi(170.0, weight)
-                records.append((
-                    user_id, measured_at.isoformat(timespec='seconds'), 170.0,
-                    weight, bmi, 1,
-                ))
-
-            connection.executemany(
-                '''INSERT INTO bmi_history
-                   (user_id, measured_at, height_cm, weight_kg, bmi, is_sample)
-                   VALUES (?, ?, ?, ?, ?, ?)''',
-                records,
-            )
 
     @staticmethod
     def hash_password(password, salt):
@@ -230,6 +197,15 @@ class Storage:
                    SET measured_at = ?, height_cm = ?, weight_kg = ?, bmi = ?
                    WHERE id = ? AND user_id = ?''',
                 (measured_date, height, weight, bmi, record_id, user_id),
+            )
+            return cursor.rowcount == 1
+
+    def delete_history_record(self, user_id, record_id):
+        """指定ユーザーが所有する測定履歴を1件削除します。"""
+        with closing(self.connect()) as connection, connection:
+            cursor = connection.execute(
+                'DELETE FROM bmi_history WHERE id = ? AND user_id = ?',
+                (record_id, user_id),
             )
             return cursor.rowcount == 1
 

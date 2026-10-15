@@ -2,9 +2,12 @@
 
 import math
 import tkinter as tk
-from datetime import datetime
+from datetime import date, timedelta
+from tkinter import ttk
 
 from bmi_logic import BMI_ZONES
+from date_picker import DatePicker
+from date_ranges import PERIOD_OPTIONS, filter_records_by_date, period_range, stored_date_to_local
 from ui_style import COLORS
 
 
@@ -13,18 +16,53 @@ class HistoryGraphPanel(tk.Frame):
 
     def __init__(self, parent):
         super().__init__(
-            parent, bg=COLORS['white'], padx=18, pady=18,
+            parent, bg=COLORS['white'], padx=18, pady=12,
             highlightthickness=1, highlightbackground=COLORS['border'],
         )
+        self.all_records = []
         self.records = []
         tk.Label(
             self, text='BMIの推移', bg=COLORS['white'], fg=COLORS['navy'],
             font=('Yu Gothic UI', 15, 'bold'),
         ).pack(anchor='w')
+        filter_bar = tk.Frame(self, bg=COLORS['white'])
+        filter_bar.pack(fill='x', pady=(4, 6))
+        controls = tk.Frame(filter_bar, bg=COLORS['white'], height=64)
+        controls.pack(fill='x')
+        controls.pack_propagate(False)
         tk.Label(
-            self, text='過去の測定履歴', bg=COLORS['white'],
-            fg=COLORS['muted'], font=('Yu Gothic UI', 9),
-        ).pack(anchor='w', pady=(2, 12))
+            controls, text='表示期間', bg=COLORS['white'], fg=COLORS['text'],
+            font=('Yu Gothic UI', 9, 'bold'),
+        ).pack(side='left', padx=(0, 8))
+        self.period_var = tk.StringVar(value='1年')
+        self.period_box = ttk.Combobox(
+            controls, textvariable=self.period_var,
+            values=(*PERIOD_OPTIONS, '自由設定'),
+            state='readonly', width=10,
+        )
+        self.period_box.pack(side='left')
+
+        today = date.today()
+        self.custom_controls = tk.Frame(controls, bg=COLORS['white'])
+        self.start_picker = DatePicker(
+            self.custom_controls, '開始日', period_range('1年', today)[0],
+        )
+        self.start_picker.pack(side='left', padx=(10, 4))
+        self.end_picker = DatePicker(self.custom_controls, '終了日', today)
+        self.end_picker.pack(side='left', padx=4)
+        tk.Button(
+            self.custom_controls, text='適用', command=self.apply_period,
+            bg='#e8eef6', fg=COLORS['navy'], activebackground='#dbe4f0',
+            relief='flat', borderwidth=0, padx=12, pady=8, cursor='hand2',
+            font=('Yu Gothic UI', 9, 'bold'),
+        ).pack(side='left', padx=(4, 0), pady=(20, 0))
+        self.custom_controls.pack_forget()
+        self.period_status = tk.StringVar()
+        tk.Label(
+            filter_bar, textvariable=self.period_status, bg=COLORS['white'],
+            fg=COLORS['muted'], font=('Yu Gothic UI', 8),
+        ).pack(anchor='w', pady=(4, 0))
+        self.period_box.bind('<<ComboboxSelected>>', self.on_period_changed)
 
         graph_body = tk.Frame(self, bg=COLORS['white'])
         graph_body.pack(fill='both', expand=True)
@@ -32,7 +70,7 @@ class HistoryGraphPanel(tk.Frame):
         chart_stack.pack(side='left', fill='both', expand=True)
 
         bmi_panel = tk.Frame(chart_stack, bg=COLORS['white'])
-        bmi_panel.pack(fill='both', expand=True, pady=(0, 6))
+        bmi_panel.pack(fill='both', expand=True, pady=(0, 3))
         tk.Label(
             bmi_panel, text='BMI', bg=COLORS['white'], fg=COLORS['muted'],
             font=('Yu Gothic UI', 9, 'bold'),
@@ -41,7 +79,7 @@ class HistoryGraphPanel(tk.Frame):
         self.bmi_canvas.pack(fill='both', expand=True)
 
         measurement_panel = tk.Frame(chart_stack, bg=COLORS['white'])
-        measurement_panel.pack(fill='both', expand=True, pady=(6, 0))
+        measurement_panel.pack(fill='both', expand=True, pady=(3, 0))
         tk.Label(
             measurement_panel, text='身長（左・cm）／体重（右・kg）',
             bg=COLORS['white'], fg=COLORS['muted'], font=('Yu Gothic UI', 9, 'bold'),
@@ -54,6 +92,7 @@ class HistoryGraphPanel(tk.Frame):
         self._create_legend(graph_body)
         self.bmi_canvas.bind('<Configure>', self.draw_bmi)
         self.measurement_canvas.bind('<Configure>', self.draw_measurements)
+        self.apply_period()
 
     def _create_legend(self, parent):
         legend = tk.Frame(parent, padx=12, pady=12, width=390, bg=COLORS['white'])
@@ -92,24 +131,57 @@ class HistoryGraphPanel(tk.Frame):
             ).pack(side='left')
 
     def set_records(self, records):
-        self.records = records
+        self.all_records = records
+        self.apply_period()
+
+    def on_period_changed(self, _event=None):
+        if self.period_var.get() == '自由設定':
+            self.custom_controls.pack(side='left', padx=(10, 0))
+            self.apply_period()
+        else:
+            self.custom_controls.pack_forget()
+            self.apply_period()
+
+    def apply_period(self):
+        today = date.today()
+        period = self.period_var.get()
+        if period == '自由設定':
+            start, end = self.start_picker.get_date(), self.end_picker.get_date()
+        else:
+            start, end = period_range(period, today)
+
+        if start > end:
+            self.records = []
+            self.period_status.set('開始日は終了日以前の日付にしてください。')
+        else:
+            self.range_start, self.range_end = start, end
+            self.records = filter_records_by_date(self.all_records, start, end)
+            self.period_status.set(
+                f'{start:%Y-%m-%d} ～ {end:%Y-%m-%d}　／　{len(self.records)}件'
+            )
         self.draw_bmi()
         self.draw_measurements()
 
-    @staticmethod
-    def _date_tick_indices(count, maximum=4):
-        label_count = min(count, maximum)
-        return sorted({
-            round(index * (count - 1) / max(label_count - 1, 1))
-            for index in range(label_count)
-        })
+    def _x_for_date(self, value, left, right):
+        span = (self.range_end - self.range_start).days
+        if span <= 0:
+            return (left + right) / 2
+        offset = (stored_date_to_local(value) - self.range_start).days
+        return left + (right - left) * offset / span
 
-    @staticmethod
-    def _format_month(value):
-        measured_at = datetime.fromisoformat(value)
-        if measured_at.tzinfo is not None:
-            measured_at = measured_at.astimezone()
-        return measured_at.strftime('%Y/%m')
+    def _draw_date_ticks(self, canvas, left, right, bottom, font_size):
+        span = (self.range_end - self.range_start).days
+        tick_offsets = [0] if span <= 0 else sorted({
+            round(span * index / 4) for index in range(5)
+        })
+        date_format = '%Y/%m' if span >= 180 else '%m/%d'
+        for offset in tick_offsets:
+            tick_date = self.range_start + timedelta(days=offset)
+            x = left if span <= 0 else left + (right - left) * offset / span
+            canvas.create_text(
+                x, bottom + 12, text=tick_date.strftime(date_format),
+                anchor='n', fill=COLORS['muted'], font=('Yu Gothic UI', font_size),
+            )
 
     def draw_bmi(self, _event=None):
         canvas = self.bmi_canvas
@@ -157,7 +229,7 @@ class HistoryGraphPanel(tk.Frame):
         count = len(self.records)
         points = []
         for index, record in enumerate(self.records):
-            x = left + (right - left) * index / max(count - 1, 1)
+            x = self._x_for_date(record[0], left, right)
             points.extend((x, value_to_y(record[1])))
         if count > 1:
             canvas.create_line(*points, fill=COLORS['primary'], width=2, smooth=True)
@@ -167,12 +239,7 @@ class HistoryGraphPanel(tk.Frame):
                 x - 4, y - 4, x + 4, y + 4,
                 fill=COLORS['primary'], outline=COLORS['white'],
             )
-        for index in self._date_tick_indices(count):
-            x = left + (right - left) * index / max(count - 1, 1)
-            canvas.create_text(
-                x, bottom + 12, text=self._format_month(self.records[index][0]),
-                anchor='n', fill=COLORS['muted'], font=('Yu Gothic UI', 9),
-            )
+        self._draw_date_ticks(canvas, left, right, bottom, 9)
 
     def draw_measurements(self, _event=None):
         canvas = self.measurement_canvas
@@ -222,7 +289,7 @@ class HistoryGraphPanel(tk.Frame):
         count = len(self.records)
         height_points, weight_points = [], []
         for index, record in enumerate(self.records):
-            x = left + (right - left) * index / max(count - 1, 1)
+            x = self._x_for_date(record[0], left, right)
             height_points.extend((x, y_for(record[2], height_low, height_high)))
             weight_points.extend((x, y_for(record[3], weight_low, weight_high)))
         if count > 1:
@@ -239,9 +306,4 @@ class HistoryGraphPanel(tk.Frame):
                 weight_x - 3, weight_y - 3, weight_x + 3, weight_y + 3,
                 fill='#ea580c', outline=COLORS['white'],
             )
-        for index in self._date_tick_indices(count):
-            x = left + (right - left) * index / max(count - 1, 1)
-            canvas.create_text(
-                x, bottom + 11, text=self._format_month(self.records[index][0]),
-                anchor='n', fill=COLORS['muted'], font=('Yu Gothic UI', 8),
-            )
+        self._draw_date_ticks(canvas, left, right, bottom, 8)

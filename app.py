@@ -16,9 +16,9 @@ from ui_style import COLORS, FONT, create_input_field, make_button
 class App(tk.Tk):
     """Coordinates authentication, measurement entry, and history views."""
 
-    def __init__(self):
+    def __init__(self, storage=None):
         super().__init__()
-        self.storage = Storage()
+        self.storage = storage if storage is not None else Storage()
         self.user_id = None
         self.username = None
         self.configure(background=COLORS['background'])
@@ -43,10 +43,6 @@ class App(tk.Tk):
     def open_main(self, user_id, username):
         self.user_id = user_id
         self.username = username
-        try:
-            self.storage.seed_sample_history(user_id)
-        except Exception as error:
-            messagebox.showwarning('履歴データ', f'初期履歴を準備できませんでした。\n{error}', parent=self)
         self.default_height = self.storage.load_latest_height(user_id)
         self.create_main_screen()
 
@@ -65,12 +61,6 @@ class App(tk.Tk):
         self.title('BMI計算機')
         self.geometry('1260x760')
         self.resizable(False, False)
-
-        menu_bar = tk.Menu(self)
-        data_menu = tk.Menu(menu_bar, tearoff=False)
-        data_menu.add_command(label='過去のデータを編集…', command=self.open_history_editor)
-        menu_bar.add_cascade(label='データ', menu=data_menu)
-        self.configure(menu=menu_bar)
 
         header = tk.Frame(self, bg=COLORS['navy'], padx=28, pady=17)
         header.pack(fill='x')
@@ -98,7 +88,34 @@ class App(tk.Tk):
             borderwidth=0, padx=12, pady=7, cursor='hand2', font=('Yu Gothic UI', 9),
         ).pack(side='left')
 
-        content = tk.Frame(self, bg=COLORS['background'], padx=22, pady=20)
+        tabs = tk.Frame(self, bg=COLORS['white'], padx=22, pady=6)
+        tabs.pack(fill='x')
+        self.page_buttons = {}
+        for page_name, label in (
+            ('measurement', '計算・グラフ'), ('history', '過去データ'),
+        ):
+            button = tk.Button(
+                tabs, text=label, command=lambda selected=page_name: self.show_main_page(selected),
+                relief='flat', borderwidth=0, padx=18, pady=8, cursor='hand2',
+                bg=COLORS['background'], fg=COLORS['muted'], font=FONT,
+            )
+            button.pack(side='left', padx=(0, 8))
+            self.page_buttons[page_name] = button
+
+        page_container = tk.Frame(self, bg=COLORS['background'])
+        page_container.pack(fill='both', expand=True)
+        page_container.rowconfigure(0, weight=1)
+        page_container.columnconfigure(0, weight=1)
+        self.pages = {
+            'measurement': tk.Frame(page_container, bg=COLORS['background']),
+            'history': HistoryEditor(
+                page_container, self.storage, self.user_id, self.history_was_updated,
+            ),
+        }
+        for page in self.pages.values():
+            page.grid(row=0, column=0, sticky='nsew')
+
+        content = tk.Frame(self.pages['measurement'], bg=COLORS['background'], padx=22, pady=12)
         content.pack(fill='both', expand=True)
         content.columnconfigure(1, weight=1)
         content.rowconfigure(0, weight=1)
@@ -160,6 +177,18 @@ class App(tk.Tk):
         self.graph_panel = HistoryGraphPanel(content)
         self.graph_panel.grid(row=0, column=1, sticky='nsew')
         self.refresh_history_graph()
+        self.show_main_page('measurement')
+
+    def show_main_page(self, page_name):
+        self.pages[page_name].tkraise()
+        self.current_page_name = page_name
+        for name, button in self.page_buttons.items():
+            selected = name == page_name
+            button.configure(
+                bg=COLORS['soft_blue'] if selected else COLORS['background'],
+                fg=COLORS['primary_active'] if selected else COLORS['muted'],
+                font=('Yu Gothic UI', 10, 'bold' if selected else 'normal'),
+            )
 
     def calculate_and_save(self):
         try:
@@ -191,11 +220,6 @@ class App(tk.Tk):
             messagebox.showerror('読み込みエラー', f'履歴を読み込めませんでした。\n{error}', parent=self)
             records = []
         self.graph_panel.set_records(records)
-
-    def open_history_editor(self):
-        HistoryEditor(
-            self, self.storage, self.user_id, self.history_was_updated,
-        )
 
     def history_was_updated(self, previous_default):
         current_height = self.height_var.get().strip()

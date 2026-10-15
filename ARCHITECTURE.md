@@ -7,13 +7,17 @@
 ```text
 BMI_cal.py → app.main() → App
                          ├─ AuthScreen → Storage
-                         └─ BMI入力画面
-                              ├─ DatePicker
-                              ├─ HistoryGraphPanel
-                              └─ HistoryEditor → Storage
+                         └─ メインウィンドウ
+                              ├─ 計算・グラフタブ
+                              │    ├─ DatePicker
+                              │    └─ HistoryGraphPanel
+                              └─ 過去データタブ
+                                   └─ HistoryEditor → Storage
 ```
 
-`App` は認証画面と計算画面を切り替えます。ログイン成功時に `Storage` からユーザーの最新身長と履歴を読み込み、計算画面へ渡します。計算後は履歴を保存してグラフを更新します。
+`App` は認証画面と、同じメインウィンドウ内の計算・グラフ／過去データ表示を切り替えます。ログイン成功時に `Storage` からユーザーの最新身長と履歴を読み込みます。計算後や履歴編集後はグラフを更新します。
+
+グラフと履歴一覧は `date_ranges.py` の共通処理で期間を計算します。サンプルデータは自動作成しません。
 
 ## モジュール
 
@@ -25,8 +29,9 @@ BMI_cal.py → app.main() → App
 | `storage.py` | SQLiteスキーマ、認証、設定、履歴の保存と読み込み |
 | `bmi_logic.py` | BMI計算と区分判定。Tkinterに依存しない処理 |
 | `date_picker.py` | 年・月・日の選択とカレンダーポップアップ |
+| `date_ranges.py` | 期間プリセットと保存日時からのローカル日付変換 |
 | `history_graph.py` | BMI、身長、体重のグラフと凡例 |
-| `history_editor.py` | 過去の測定履歴の一覧と編集 |
+| `history_editor.py` | メインウィンドウ内で過去の測定履歴を期間抽出、一覧、編集、削除 |
 | `ui_style.py` | 共通配色、ボタン、入力欄 |
 
 ## SQLiteデータ
